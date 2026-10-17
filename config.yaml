@@ -1,8 +1,8 @@
-# HassBle Configuration File
+# HassBle configuration — Toyota Proace City (PSA K9 platform, 2019+)
+# Adapter: Vgate iCar Pro ELM327 V2.3, Bluetooth 4.0 (BLE) variant
 #
-# Host config.yaml and templates.yaml in a Git repository (e.g., GitHub).
-# In the HassBle app: enter owner/repo and branch (e.g. eigger/hassble-config, main).
-# The app loads config.yaml for the gateway and templates.yaml for Import template.
+# Served from https://gitea.trzcinski.pro/czcionka/hassble-config (branch main).
+# The app accepts config only from gitea.trzcinski.pro over HTTPS.
 #
 # Do NOT put any Home Assistant credentials (URL/Token) in this file. Enter them in the app.
 
@@ -14,250 +14,473 @@ defaults:
     min_interval: 10s
 
 devices:
-  # ──────────────────────────────────────────────────────────────
-  # Path A: BLE Passive Scanning (Advertisements)
-  # ──────────────────────────────────────────────────────────────
-  # Jaalee JHT — instance_mode: mac → 스캔된 MAC마다 jaalee_jht_{MAC} 엔티티 자동 생성
-  # Ref: https://github.com/eigger/espcomponents/tree/master/components/jaalee_jht
-  # Temp/Humidity formula: https://sensor.jaalee.com/scan_api.html
-  #- id: jaalee_jht
-  #  name: "Jaalee JHT"
-  #  source: advertisement
-  #  instance_mode: mac
-  #  match:
-  #    manufacturer_id: 76           # Apple Inc. (0x004C) — decimal 사용 필수 (hex 0x... 파싱 불안정)
-  #    manufacturer_min_length: 24
-  #    manufacturer_hex_prefix: "0215"  # iBeacon 타입 마커 (0x02=subtype, 0x15=length 21)
-  #  sensors:
-  #    - key: temperature
-  #      device_class: temperature
-  #      unit: "°C"
-  #      state_class: measurement
-  #      accuracy_decimals: 2
-  #      source_field: manufacturer_data
-  #      decode: { offset: 18, length: 2, type: uint16, endian: big, scale: 0.002670288, offset_value: -45 }
-  #    - key: humidity
-  #      device_class: humidity
-  #      unit: "%"
-  #      state_class: measurement
-  #      accuracy_decimals: 2
-  #      source_field: manufacturer_data
-  #      decode: { offset: 20, length: 2, type: uint16, endian: big, scale: 0.001524504 }
-  #    - key: battery
-  #      device_class: battery
-  #      unit: "%"
-  #      state_class: measurement
-  #      source_field: manufacturer_data
-  #      decode: { offset: 23, length: 1, type: uint8 }
-
-  # 지하주차장 위치 요청 비콘 (BLE 광고 송신 및 수신 예제)
-  # UUID는 본인의 패킷 캡처에서 추출한 고유값으로 교체하세요.
-  #- id: mytown_parking
-  #  name: "마이타운 주차위치"
-  #  source: advertisement
-  #  instance_mode: shared              # 기둥 MAC이 매번 달라도 엔티티 1벌 유지
-  #  match:
-  #    manufacturer_id: 861             # 0x035D — kaml 파싱을 위해 10진수(decimal) 사용 권장
-  #    manufacturer_hex_prefix: "06"    # 06 응답 포맷 (본인 16B UUID 접두사)
-  #    manufacturer_min_length: 18
-  #  advertise:
-  #    manufacturer_id: 861
-  #    payload: "05<본인_16BYTE_UUID_HEX>40{counter:02X}"
-  #    counter_mode: reset              # reset(기본) | persist
-  #    counter_start: 0                 # reset 모드 시작값 (기본 0)
-  #    mode: balanced                   # low_power | balanced | low_latency
-  #    tx_power: high                   # ultra_low | low | medium | high
-  #    timeout: 15s                     # 이 시간 지나면 자동 송신 중단
-  #    repeat_interval: 1s              # (선택) 이 주기로 payload 갱신 = counter 증가
-  #    stop_on_response: true           # 06 응답 수신 시 즉시 송신 중단
-  #  controls:
-  #    - key: request_location
-  #      type: button
-  #      name: "주차위치 요청"
-  #      action: advertise              # command 대신 앱 내부 광고 송신 동작 실행
-  #      icon: mdi:car-search
-  #  sensors:
-  #    - key: parking_floor
-  #      platform: text_sensor
-  #      icon: mdi:layers-outline
-  #      source_field: manufacturer_data
-  #      decode:
-  #        offset: 17
-  #        length: 1
-  #        type: uint8
-  #        map:
-  #          "251": "B5"
-  #          "252": "B4"
-  #          "253": "B3"
-  #          "254": "B2"
-  #          "255": "B1"
-  #          "0": "LB"
-  #          "1": "1F"
-  #          "2": "2F"
-  #          "3": "3F"
-  #    - key: parking_location
-  #      platform: text_sensor
-  #      icon: mdi:map-marker-outline
-  #      source_field: manufacturer_data
-  #      decode: { offset: 18, length: 0, type: string }
-
-  # Parking beacon — instance_mode: shared → MAC 무관, manufacturer 0x035D 광고가 하나의 엔티티 공유
-  # 요청 6바이트: [0]=02 [1]=05 [2]=00 [3]=battery [4]=state [5]=counter
-  # 응답 14바이트: [0]=04(응답타입), [1..6]=KeyMAC, [7..10]=월·일·시·분, [11]=층(256-raw), [12..13]=구역코드
-  # 04xx: 주차위치 응답 비콘, 07xx: SmartKey 인증(22B 암호화), 02xx: 출입 이벤트(6B) — prefix "04" 로 응답만 매칭
-  - id: parking_beacon
-    name: "Parking Beacon"
-    source: advertisement
-    instance_mode: shared
-    match:
-      manufacturer_id: 861            # 0x035D
-      manufacturer_hex_prefix: "04"   # 응답 비콘만 매칭 (07=SmartKey 인증, 02=출입 이벤트 제외)
-      manufacturer_min_length: 14     # 최소 14바이트
-    #advertise:
-    #  manufacturer_id: 861            # 0x035D
-    #  # 02 05 00 | battery 100% | {state} | {counter} — 카운터는 버튼마다 +1, 버스트 중 고정
-    #  payload: "02050064{state:02X}{counter:02X}"
-    #  counter_mode: persist          # 요청마다 누적. 0xFF 다음은 0
-    #  counter_start: 0
-    #  mode: low_latency              # ~100ms → press 200ms 동안 약 1~2패킷
-    #  tx_power: high
-    #  timeout: 4s                    # 페이즈 합(3.2s)보다 약간 큰 상한
-    #  local_name: "APT SmartKey"     # Complete Local Name. 송신 중 이 이름으로 바꾸고, 종료·재시작 때 초기값으로 되돌림
-    #  payload_phases:
-    #    - state: 65                  # 0x41 버튼 누름 + ACK 대기
-    #      duration: 200ms
-    #    - state: 64                  # 0x40 홀드 + ACK 대기
-    #      duration: 3s
-    #  stop_on_response: true
-    #controls:
-    #  - key: request_location
-    #    type: button
-    #    name: "주차위치 요청"
-    #    action: advertise
-    #    icon: mdi:car-search
-    sensors:
-      - key: parking_time
-        device_class: timestamp
-        icon: mdi:clock-time-four-outline
-        source_field: manufacturer_data
-        length: 14
-        decode: { offset: 7, length: 4, type: timestamp }
-      - key: parking_floor
-        icon: mdi:layers-outline
-        source_field: manufacturer_data
-        length: 14
-        accuracy_decimals: 0
-        decode: { offset: 11, length: 1, type: uint8, scale: -1, offset_value: 256 }
-      - key: parking_location
-        platform: text_sensor
-        icon: mdi:map-marker-outline
-        source_field: manufacturer_data
-        length: 14
-        decode: { offset: 12, length: 2, type: string }
-
-  # APT SmartKey 출입문 이벤트 — 고정 MAC으로 하드웨어 필터, 02xx 6바이트 패킷만 파싱
-  # payload 6바이트: [0]=02(이벤트타입), [1..3]=05 00 55, [4]=상태, [5]=카운터
-  # byte[4] 상태값: 0x41(65)=entering_start, 0x01(1)=entering, 0x40(64)=exiting, 0x00(0)=idle
-  # 0x41→0x01 두 값 모두 "entering"으로 매핑 → on_change_only가 중간 전환 노이즈 제거
-  - id: apt_key_door
-    name: "APT Door Event"
-    source: advertisement
-    instance_mode: shared
-    match:
-      manufacturer_id: 861            # 0x035D
-      manufacturer_hex_prefix: "02"   # 출입 이벤트 타입만 (07xx=인증 22B, 04xx=주차응답 14B 제외)
-    sensors:
-      - key: door_status
-        platform: text_sensor
-        icon: mdi:door
-        source_field: manufacturer_data
-        length: 6
-        publish:
-          min_interval: 1s            # 기본 10s 오버라이드 — 이벤트가 수 초 내 전환됨
-        decode:
-          offset: 4
-          length: 1
-          type: uint8
-          map:
-            "65": "entering"          # 0x41 인증 시작
-            "1": "entered"           # 0x01 인증 완료 (entering과 동일 → 전환 노이즈 제거)
-            "64": "exiting"           # 0x40
-            "0": "idle"               # 0x00
-      # 통과 "시각"을 남기는 이벤트 엔티티 — 상태값이 마지막 발생 시각이라 같은 event_type이
-      # 반복돼도 매번 갱신되고, HA 재시작 때 복원되지 않아 묵은 값이 되살아나지 않는다.
-      # door_status(현재 상태)와 병행: 같은 광고에서 두 엔티티를 뽑는다.
-      - key: door_event
-        platform: event
-        event_types: [entering, entered, exiting, idle]
-        icon: mdi:door-open
-        source_field: manufacturer_data
-        length: 6
-        publish:
-          heartbeat: 60s            # 같은 event_type이어도 60초 지났으면 재발화 = 통과마다 1회
-        decode:
-          offset: 4
-          length: 1
-          type: uint8
-          map:
-            "65": "entering"
-            "1": "entered"
-            "64": "exiting"
-            "0": "idle"
-
-  # ──────────────────────────────────────────────────────────────
-  # Path C: OBD (ELM327) over BLE
-  # ──────────────────────────────────────────────────────────────
-  - id: car_obd
-    name: "Vehicle OBD"
+  - id: proace_city_obd
+    name: "Toyota Proace City"
     source: obd
     obd:
+      # Bind the adapter MAC in the app (Sensors tab) instead of committing it here.
+      # The adapter advertises as "IOS-Vlink" with service 0x18F0 (checked with nRF Connect).
       service_uuid: "18F0"
       tx_char_uuid: "2AF1"
       rx_char_uuid: "2AF0"
       tx_delay: 50ms
       init_commands:
-        - "ATSP6"
+        - "ATSP6"   # ISO 15765-4 CAN 11-bit 500 kbps, confirmed by Car Scanner
+      # PSA sensors below talk to the engine ECU at 6A8 (answers from 688);
+      # standard PIDs need the functional header and automatic receive filter back.
+      default_commands: ["ATSH7DF", "ATCRA"]
     sensors:
-      #- { key: rpm,          preset: rpm,                 update_interval: 1s }
-      #- { key: speed,        preset: speed,               update_interval: 1s }
-      #- { key: engine_load,  preset: engine_load,         update_interval: 1s }
-      #- { key: throttle,     preset: throttle,            update_interval: 1s }
-      #- { key: coolant_temp, preset: coolant_temp,        update_interval: 10s }
-      #- { key: intake_temp,  preset: intake_air_temp,     update_interval: 10s }
-      #- { key: ambient_temp, preset: ambient_temp,        update_interval: 30s }
-      - { key: battery,      preset: battery_voltage,     update_interval: 10s }
-      - { key: run_time,     preset: run_time,            update_interval: 5s }
-      - { key: odometer,     preset: odometer,            update_interval: 30s }
+      # Standard SAE J1979 mode 01 PIDs. A PID the ECU does not support answers NO DATA —
+      # disable such sensors in the app.
+      - { key: rpm,              preset: rpm,             update_interval: 2s }
+      - { key: speed,            preset: speed,           update_interval: 2s }
+      - { key: engine_load,      preset: engine_load,     update_interval: 5s }
+      - { key: coolant_temp,     preset: coolant_temp,    update_interval: 30s }
+      - { key: intake_temp,      preset: intake_air_temp, update_interval: 30s }
+      - { key: ambient_temp,     preset: ambient_temp,    update_interval: 60s }
+      - { key: battery,          preset: battery_voltage, update_interval: 10s }
+      - { key: run_time,         preset: run_time,        update_interval: 10s }
+      # The ECU does not answer 01 2F; see the psa_fuel_level_* candidates below.
       - key: fuel_level
         preset: fuel_level
         update_interval: 30s
         publish:
           deadband: 0.5
           min_interval: 60s
-      # GM Extensions (mode 22)
-      #- { key: gear,         preset: gm_current_gear,     update_interval: 1s }
-      #- { key: prnd,         preset: gm_prnd_status_alt,  update_interval: 1s }
-      #- { key: torque,       preset: actual_torque,       update_interval: 1s }
-      #- { key: oil_pressure, preset: gm_oil_pressure,     update_interval: 2s }
-      #- { key: trans_temp,   preset: gm_trans_temp,       update_interval: 10s }
+      # PID A6 is mandatory only on newer (Euro 6d) ECUs.
+      - { key: odometer,         preset: odometer,        update_interval: 60s }
+      - key: intake_map
+        mode: "01"
+        pid: "0B"
+        formula: "a"
+        unit: "kPa"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 5s
+      - key: barometric_pressure
+        mode: "01"
+        pid: "33"
+        formula: "a"
+        unit: "kPa"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 120s
+      # Diesel (1.5 BlueHDi) common-rail pressure; petrol engines answer NO DATA.
+      - key: fuel_rail_pressure
+        mode: "01"
+        pid: "23"
+        formula: "(a*256+b)*10"
+        unit: "kPa"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 5s
+      - key: distance_since_dtc_clear
+        mode: "01"
+        pid: "31"
+        formula: "a*256+b"
+        unit: "km"
+        device_class: distance
+        state_class: total_increasing
+        accuracy_decimals: 0
+        update_interval: 300s
+      - key: distance_with_mil_on
+        mode: "01"
+        pid: "21"
+        formula: "a*256+b"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:engine-off
+        update_interval: 300s
+      # ── DPF / exhaust aftertreatment (SAE J1979 diesel PIDs) ──
+      # Byte a is the PID's "supported" bitmask, so values start at byte b.
+      # Car Scanner lists DPF data only from the PSA profile, so these may answer NO DATA;
+      # the PSA section below reads the same values from the engine ECU directly.
+      - key: dpf_inlet_temp
+        mode: "01"
+        pid: "7C"
+        formula: "(b*256+c)/10-40"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:thermometer-chevron-up
+        update_interval: 10s
+      - key: dpf_outlet_temp
+        mode: "01"
+        pid: "7C"
+        formula: "(d*256+e)/10-40"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:thermometer-chevron-down
+        update_interval: 10s
+      # Signed 16-bit: rising differential pressure means soot is building up.
+      - key: dpf_differential_pressure
+        mode: "01"
+        pid: "7A"
+        formula: "(b*256+c-floor(b/128)*65536)/100"
+        unit: "kPa"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 2
+        update_interval: 10s
+      # 100 % means the ECU wants a regeneration.
+      - key: dpf_regen_trigger
+        mode: "01"
+        pid: "8B"
+        formula: "c*100/255"
+        unit: "%"
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:air-filter
+        update_interval: 30s
+      - key: dpf_regen_required
+        platform: binary_sensor
+        mode: "01"
+        pid: "8B"
+        formula: "floor(c/255)"
+        icon: mdi:air-filter
+        update_interval: 30s
+      - key: dpf_regen_active
+        platform: binary_sensor
+        mode: "01"
+        pid: "8B"
+        formula: "b%2"
+        icon: mdi:fire
+        update_interval: 10s
+      - key: dpf_avg_distance_between_regens
+        mode: "01"
+        pid: "8B"
+        formula: "f*256+g"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 300s
+      - key: egt_bank1_sensor1
+        mode: "01"
+        pid: "78"
+        formula: "(b*256+c)/10-40"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 10s
+      - key: egt_bank1_sensor2
+        mode: "01"
+        pid: "78"
+        formula: "(d*256+e)/10-40"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 10s
 
-  # ──────────────────────────────────────────────────────────────
-  # Path B: GATT Notify & Write (Bi-directional Control)
-  # ──────────────────────────────────────────────────────────────
-  #- id: custom_meter
-  #  name: "Custom BLE Meter"
-  #  source: gatt_notify
-  #  gatt:
-  #    service_uuid: "ffe0"
-  #    notify_char_uuid: "ffe1"
-  #    write_char_uuid: "ffe2"
-  #  sensors:
-  #    - key: power
-  #      unit: "W"
-  #      device_class: power
-  #      state_class: measurement
-  #      decode: { offset: 0, length: 2, type: uint16, endian: little }
-  #  controls:
-  #    - key: relay
-  #      type: switch
-  #      command: { on: "A10100", off: "A10000" }
+      # ── PSA engine ECU (Bosch MD1CS003, 1.5 BlueHDi), UDS mode 22 ──
+      # DIDs and scaling from OBDb (github.com/OBDb/Citroen, header 6A8 → 688).
+      # Names match what Car Scanner's "Citroen 1.5 BlueHDI" profile shows.
+      # Byte a is the first byte after the "62 Dxxx" echo. OBDb marks some of these DIDs as
+      # little-endian (blsb), but on this ECU that gave 425 % soot, so all values are read big-endian.
+      - key: psa_dpf_soot_level
+        mode: "22"
+        pid: "D52F"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/10.24"
+        unit: "%"
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:air-filter
+        update_interval: 60s
+      - key: psa_dpf_soot_load
+        mode: "22"
+        pid: "D54B"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/1024"
+        unit: "g/L"
+        state_class: measurement
+        accuracy_decimals: 2
+        icon: mdi:air-filter
+        update_interval: 60s
+      - key: psa_dpf_regen_status
+        mode: "22"
+        pid: "D521"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a"
+        accuracy_decimals: 0
+        icon: mdi:fire
+        update_interval: 15s
+      - key: psa_dpf_distance_since_regen
+        mode: "22"
+        pid: "D519"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/16"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 120s
+      - key: psa_dpf_avg_regen_interval
+        mode: "22"
+        pid: "D525"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/16"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 600s
+      - key: psa_dpf_remaining_life
+        mode: "22"
+        pid: "D530"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b-floor(a/128)*65536)*16"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        entity_category: diagnostic
+        update_interval: 3600s
+      # Car Scanner shows this deviation in mbar.
+      - key: psa_dpf_diff_pressure_deviation
+        mode: "22"
+        pid: "D518"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*256+b-floor(a/128)*65536"
+        unit: "mbar"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 15s
+      - key: psa_egt_before_catalyst
+        mode: "22"
+        pid: "D52E"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b-floor(a/128)*65536)/10-273.14"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 10s
+      - key: psa_egt_after_catalyst
+        mode: "22"
+        pid: "D555"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b-floor(a/128)*65536)/10-273.14"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 10s
+      - key: psa_adblue_range
+        mode: "22"
+        pid: "D513"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*50"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:water
+        update_interval: 600s
+      - key: psa_adblue_volume
+        mode: "22"
+        pid: "D558"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a/10"
+        unit: "L"
+        device_class: volume_storage
+        state_class: measurement
+        accuracy_decimals: 1
+        icon: mdi:water
+        update_interval: 600s
+      - key: psa_adblue_temp
+        mode: "22"
+        pid: "D56D"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a-floor(a/128)*256"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        entity_category: diagnostic
+        update_interval: 600s
+      - key: psa_oil_temp
+        mode: "22"
+        pid: "D47D"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b-floor(a/128)*65536)/10-273.14"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:oil-temperature
+        update_interval: 30s
+      - key: psa_oil_pressure
+        mode: "22"
+        pid: "D429"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/1000"
+        unit: "bar"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 2
+        update_interval: 15s
+      - key: psa_km_since_oil_change
+        mode: "22"
+        pid: "D43F"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*256+b"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:oil
+        update_interval: 3600s
+      - key: psa_odometer
+        mode: "22"
+        pid: "D49C"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*16777216+b*65536+c*256+d"
+        unit: "km"
+        device_class: distance
+        state_class: total_increasing
+        accuracy_decimals: 0
+        icon: mdi:counter
+        update_interval: 300s
+      - key: psa_fuel_rail_pressure
+        mode: "22"
+        pid: "D446"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/10"
+        unit: "bar"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 10s
+      - key: psa_fuel_temp
+        mode: "22"
+        pid: "D42A"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/10-273.14"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 60s
+      - key: psa_boost_air_temp
+        mode: "22"
+        pid: "D411"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b-floor(a/128)*65536)/10-273.14"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 30s
+      - key: psa_engaged_gear
+        mode: "22"
+        pid: "D43D"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a"
+        accuracy_decimals: 0
+        icon: mdi:car-shift-pattern
+        update_interval: 5s
+      - key: psa_water_in_diesel
+        platform: binary_sensor
+        mode: "22"
+        pid: "D52C"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "signum(a)"
+        icon: mdi:water-alert
+        update_interval: 300s
+      - key: psa_battery_voltage
+        mode: "22"
+        pid: "D78A"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/128"
+        unit: "V"
+        device_class: voltage
+        state_class: measurement
+        accuracy_decimals: 2
+        update_interval: 30s
+      - key: psa_battery_current
+        mode: "22"
+        pid: "D497"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*16777216+b*65536+c*256+d-floor(a/128)*4294967296)/1024"
+        unit: "A"
+        device_class: current
+        state_class: measurement
+        accuracy_decimals: 1
+        update_interval: 30s
+      # Raw BSI codes; meaning not documented in OBDb.
+      - key: psa_battery_charge_state
+        mode: "22"
+        pid: "D742"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a"
+        accuracy_decimals: 0
+        entity_category: diagnostic
+        update_interval: 600s
+      - key: psa_battery_wear
+        mode: "22"
+        pid: "D741"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a"
+        accuracy_decimals: 0
+        entity_category: diagnostic
+        update_interval: 3600s
+      - key: psa_stop_start_restarts
+        mode: "22"
+        pid: "D71B"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*16777216+b*65536+c*256+d"
+        accuracy_decimals: 0
+        entity_category: diagnostic
+        update_interval: 3600s
+
+      # ── PSA fuel level candidates (engine ECU 7E0 → 7E8, OBDb) ──
+      # OBDb lists three sources; keep whichever answers on this car and disable the rest.
+      - key: psa_fuel_level_pct
+        mode: "22"
+        pid: "0227"
+        pre_commands: ["ATSH7E0", "ATCRA"]
+        formula: "a*100/255"
+        unit: "%"
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:gas-station
+        update_interval: 60s
+        publish:
+          deadband: 0.5
+          min_interval: 60s
+      - key: psa_fuel_level_l
+        mode: "22"
+        pid: "040F"
+        pre_commands: ["ATSH7E0", "ATCRA"]
+        formula: "(a*256+b-floor(a/128)*65536)*711/1250"
+        unit: "L"
+        device_class: volume_storage
+        state_class: measurement
+        accuracy_decimals: 1
+        icon: mdi:gas-station
+        update_interval: 60s
+        publish:
+          deadband: 0.3
+          min_interval: 60s
+      - key: psa_fuel_level_21
+        mode: "21"
+        pid: "A8"
+        pre_commands: ["ATSH7E0", "ATCRA"]
+        formula: "(m*256+n)/256"
+        unit: "%"
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:gas-station
+        update_interval: 60s
