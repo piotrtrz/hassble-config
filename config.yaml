@@ -246,30 +246,7 @@ devices:
         state_class: measurement
         accuracy_decimals: 2
         update_interval: 15s
-      # 22 D43F is not implemented on this ECU; D534 is the closest equivalent
-      # ("mileage since the last oil change", km / 10) and D536 the inverse.
-      - key: psa_km_since_oil_change
-        mode: "22"
-        pid: "D534"
-        pre_commands: ["ATSH6A8", "ATCRA688"]
-        formula: "(a*256+b)/10"
-        unit: "km"
-        device_class: distance
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:oil
-        update_interval: 3600s
-      - key: psa_km_to_next_oil_change
-        mode: "22"
-        pid: "D536"
-        pre_commands: ["ATSH6A8", "ATCRA688"]
-        formula: "a*256+b"
-        unit: "km"
-        device_class: distance
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:oil
-        update_interval: 3600s
+      # No oil-change counter answers on this ECU (22 D43F, D534, D536 all NO DATA).
       - key: psa_odometer
         mode: "22"
         pid: "D49C"
@@ -311,12 +288,52 @@ devices:
         state_class: measurement
         accuracy_decimals: 0
         update_interval: 30s
-      - key: psa_engaged_gear
+      # ── Gearbox (EAT8 8-speed automatic) ──
+      # 22 D43D (engine ECU) reports only 0/1 here — "drive coupled", not a gear
+      # number — so the gear comes from the gearbox ECU (6A9 → 689) and the BSI.
+      - key: psa_gearbox_gear
         mode: "22"
-        pid: "D43D"
+        pid: "D501"
+        pre_commands: ["ATSH6A9", "ATCRA689"]
+        formula: "a"
+        accuracy_decimals: 0
+        icon: mdi:car-shift-pattern
+        update_interval: 5s
+      - key: psa_calc_gear
+        mode: "22"
+        pid: "D409"
         pre_commands: ["ATSH6A8", "ATCRA688"]
         formula: "a"
         accuracy_decimals: 0
+        icon: mdi:car-shift-pattern
+        entity_category: diagnostic
+        update_interval: 5s
+      - key: psa_atf_temp
+        mode: "22"
+        pid: "D550"
+        pre_commands: ["ATSH6A9", "ATCRA689"]
+        formula: "a-40"
+        unit: "°C"
+        device_class: temperature
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:oil-temperature
+        update_interval: 30s
+      # PRND from the BSI (752 → 652):
+      - key: psa_selected_gear
+        platform: text_sensor
+        mode: "22"
+        pid: "DC96"
+        pre_commands: ["ATSH752", "ATCRA652"]
+        decode:
+          offset: 0
+          length: 1
+          type: uint8
+          map:
+            "0": "P"
+            "1": "R"
+            "2": "N"
+            "3": "D"
         icon: mdi:car-shift-pattern
         update_interval: 5s
       - key: psa_water_in_diesel
@@ -373,34 +390,6 @@ devices:
         entity_category: diagnostic
         update_interval: 3600s
 
-      # ── PSA fuel level ──
-      # 01 2F and the OBDb 7E0 candidates (22 0227, 22 040F, 21 A8) all answer NO DATA
-      # on this ECU. 22 1022 on the 7C0 → 7C8 ECU (OBDb: fuel level in liters) is the
-      # remaining candidate — if it also answers NO DATA, disable this sensor and
-      # drop fuel level over OBD.
-      - key: psa_fuel_level_l
-        mode: "22"
-        pid: "1022"
-        pre_commands: ["ATSH7C0", "ATCRA7C8"]
-        formula: "(a*256+b)/100"
-        unit: "L"
-        device_class: volume_storage
-        state_class: measurement
-        accuracy_decimals: 1
-        icon: mdi:gas-station
-        update_interval: 60s
-        publish:
-          deadband: 0.3
-          min_interval: 60s
-      # Backup candidate on the same ECU (OBDb: 500/3785 gal = 0.5 L per count):
-      # - key: psa_fuel_level_l
-      #   mode: "21"
-      #   pid: "29"
-      #   pre_commands: ["ATSH7C0", "ATCRA7C8"]
-      #   formula: "a*0.5"
-      #   unit: "L"
-      #   device_class: volume_storage
-      #   state_class: measurement
-      #   accuracy_decimals: 1
-      #   icon: mdi:gas-station
-      #   update_interval: 60s
+      # Fuel level is not exposed over OBD on this car: 01 2F, the OBDb 7E0 set
+      # (22 0227 / 22 040F / 21 A8) and the 7C0 set (22 1022 / 21 29 — Toyota
+      # combination-meter DIDs) all answer NO DATA. Read it off the dashboard.
