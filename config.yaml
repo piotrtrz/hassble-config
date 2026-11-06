@@ -319,21 +319,15 @@ devices:
         accuracy_decimals: 0
         icon: mdi:oil-temperature
         update_interval: 30s
-      # PRND from the BSI (752 → 652):
+      # PRND as shown on the instrument panel. 22 DC96 on the BSI (752 -> 652)
+      # never answers on this car; the gearbox ECU does. Raw codes for now —
+      # the P/R/N/D map is filled in after a P->R->N->D calibration.
       - key: psa_selected_gear
-        platform: text_sensor
         mode: "22"
-        pid: "DC96"
-        pre_commands: ["ATSH752", "ATCRA652"]
-        decode:
-          offset: 0
-          length: 1
-          type: uint8
-          map:
-            "0": "P"
-            "1": "R"
-            "2": "N"
-            "3": "D"
+        pid: "D500"
+        pre_commands: ["ATSH6A9", "ATCRA689"]
+        formula: "a"
+        accuracy_decimals: 0
         icon: mdi:car-shift-pattern
         update_interval: 5s
       - key: psa_water_in_diesel
