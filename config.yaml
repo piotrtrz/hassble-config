@@ -1,8 +1,8 @@
 # HassBle configuration — Toyota Proace City (PSA K9 platform, 2019+)
 # Adapter: Vgate iCar Pro ELM327 V2.3, Bluetooth 4.0 (BLE) variant
 #
-# Served from https://gitea.trzcinski.pro/czcionka/hassble-config (branch main).
-# The app accepts config only from gitea.trzcinski.pro over HTTPS.
+# Served from https://github.com/piotrtrz/hassble-config (branch main).
+# In the HassBle app enter piotrtrz/hassble-config, branch main (Sensors tab).
 #
 # Do NOT put any Home Assistant credentials (URL/Token) in this file. Enter them in the app.
 
@@ -40,15 +40,8 @@ devices:
       - { key: ambient_temp,     preset: ambient_temp,    update_interval: 60s }
       - { key: battery,          preset: battery_voltage, update_interval: 10s }
       - { key: run_time,         preset: run_time,        update_interval: 10s }
-      # The ECU does not answer 01 2F; see the psa_fuel_level_* candidates below.
-      - key: fuel_level
-        preset: fuel_level
-        update_interval: 30s
-        publish:
-          deadband: 0.5
-          min_interval: 60s
-      # PID A6 is mandatory only on newer (Euro 6d) ECUs.
-      - { key: odometer,         preset: odometer,        update_interval: 60s }
+      # This ECU answers NO DATA to 01 2F (fuel level) and 01 A6 (odometer);
+      # use psa_fuel_level_l and psa_odometer below instead.
       - key: intake_map
         mode: "01"
         pid: "0B"
@@ -96,91 +89,11 @@ devices:
         accuracy_decimals: 0
         icon: mdi:engine-off
         update_interval: 300s
-      # ── DPF / exhaust aftertreatment (SAE J1979 diesel PIDs) ──
-      # Byte a is the PID's "supported" bitmask, so values start at byte b.
-      # Car Scanner lists DPF data only from the PSA profile, so these may answer NO DATA;
-      # the PSA section below reads the same values from the engine ECU directly.
-      - key: dpf_inlet_temp
-        mode: "01"
-        pid: "7C"
-        formula: "(b*256+c)/10-40"
-        unit: "°C"
-        device_class: temperature
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:thermometer-chevron-up
-        update_interval: 10s
-      - key: dpf_outlet_temp
-        mode: "01"
-        pid: "7C"
-        formula: "(d*256+e)/10-40"
-        unit: "°C"
-        device_class: temperature
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:thermometer-chevron-down
-        update_interval: 10s
-      # Signed 16-bit: rising differential pressure means soot is building up.
-      - key: dpf_differential_pressure
-        mode: "01"
-        pid: "7A"
-        formula: "(b*256+c-floor(b/128)*65536)/100"
-        unit: "kPa"
-        device_class: pressure
-        state_class: measurement
-        accuracy_decimals: 2
-        update_interval: 10s
-      # 100 % means the ECU wants a regeneration.
-      - key: dpf_regen_trigger
-        mode: "01"
-        pid: "8B"
-        formula: "c*100/255"
-        unit: "%"
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:air-filter
-        update_interval: 30s
-      - key: dpf_regen_required
-        platform: binary_sensor
-        mode: "01"
-        pid: "8B"
-        formula: "floor(c/255)"
-        icon: mdi:air-filter
-        update_interval: 30s
-      - key: dpf_regen_active
-        platform: binary_sensor
-        mode: "01"
-        pid: "8B"
-        formula: "b%2"
-        icon: mdi:fire
-        update_interval: 10s
-      - key: dpf_avg_distance_between_regens
-        mode: "01"
-        pid: "8B"
-        formula: "f*256+g"
-        unit: "km"
-        device_class: distance
-        state_class: measurement
-        accuracy_decimals: 0
-        update_interval: 300s
-      - key: egt_bank1_sensor1
-        mode: "01"
-        pid: "78"
-        formula: "(b*256+c)/10-40"
-        unit: "°C"
-        device_class: temperature
-        state_class: measurement
-        accuracy_decimals: 0
-        update_interval: 10s
-      - key: egt_bank1_sensor2
-        mode: "01"
-        pid: "78"
-        formula: "(d*256+e)/10-40"
-        unit: "°C"
-        device_class: temperature
-        state_class: measurement
-        accuracy_decimals: 0
-        update_interval: 10s
+      # This ECU answers NO DATA to the optional SAE J1979 diesel PIDs
+      # (01 78 EGT, 01 7A/7C DPF, 01 8B aftertreatment); the PSA section below
+      # reads the same values from the engine ECU directly. 01 7A used to return
+      # an implausible 128-179 kPa here (unverified byte layout), so it is gone too;
+      # psa_dpf_diff_pressure (22 D520) replaces it.
 
       # ── PSA engine ECU (Bosch MD1CS003, 1.5 BlueHDi), UDS mode 22 ──
       # DIDs and scaling from OBDb (github.com/OBDb/Citroen, header 6A8 → 688).
@@ -257,6 +170,18 @@ devices:
         state_class: measurement
         accuracy_decimals: 0
         update_interval: 15s
+      # Measured DPF differential pressure (OBDb D520). OBDb leaves the unit open;
+      # like D518 it is read as mbar — verify once against Car Scanner.
+      - key: psa_dpf_diff_pressure
+        mode: "22"
+        pid: "D520"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "a*256+b-floor(a/128)*65536"
+        unit: "mbar"
+        device_class: pressure
+        state_class: measurement
+        accuracy_decimals: 0
+        update_interval: 15s
       - key: psa_egt_before_catalyst
         mode: "22"
         pid: "D52E"
@@ -299,17 +224,7 @@ devices:
         accuracy_decimals: 1
         icon: mdi:water
         update_interval: 600s
-      - key: psa_adblue_temp
-        mode: "22"
-        pid: "D56D"
-        pre_commands: ["ATSH6A8", "ATCRA688"]
-        formula: "a-floor(a/128)*256"
-        unit: "°C"
-        device_class: temperature
-        state_class: measurement
-        accuracy_decimals: 0
-        entity_category: diagnostic
-        update_interval: 600s
+      # 22 D56D (AdBlue temperature) is not implemented on this ECU.
       - key: psa_oil_temp
         mode: "22"
         pid: "D47D"
@@ -331,9 +246,22 @@ devices:
         state_class: measurement
         accuracy_decimals: 2
         update_interval: 15s
+      # 22 D43F is not implemented on this ECU; D534 is the closest equivalent
+      # ("mileage since the last oil change", km / 10) and D536 the inverse.
       - key: psa_km_since_oil_change
         mode: "22"
-        pid: "D43F"
+        pid: "D534"
+        pre_commands: ["ATSH6A8", "ATCRA688"]
+        formula: "(a*256+b)/10"
+        unit: "km"
+        device_class: distance
+        state_class: measurement
+        accuracy_decimals: 0
+        icon: mdi:oil
+        update_interval: 3600s
+      - key: psa_km_to_next_oil_change
+        mode: "22"
+        pid: "D536"
         pre_commands: ["ATSH6A8", "ATCRA688"]
         formula: "a*256+b"
         unit: "km"
@@ -445,26 +373,16 @@ devices:
         entity_category: diagnostic
         update_interval: 3600s
 
-      # ── PSA fuel level candidates (engine ECU 7E0 → 7E8, OBDb) ──
-      # OBDb lists three sources; keep whichever answers on this car and disable the rest.
-      - key: psa_fuel_level_pct
-        mode: "22"
-        pid: "0227"
-        pre_commands: ["ATSH7E0", "ATCRA"]
-        formula: "a*100/255"
-        unit: "%"
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:gas-station
-        update_interval: 60s
-        publish:
-          deadband: 0.5
-          min_interval: 60s
+      # ── PSA fuel level ──
+      # 01 2F and the OBDb 7E0 candidates (22 0227, 22 040F, 21 A8) all answer NO DATA
+      # on this ECU. 22 1022 on the 7C0 → 7C8 ECU (OBDb: fuel level in liters) is the
+      # remaining candidate — if it also answers NO DATA, disable this sensor and
+      # drop fuel level over OBD.
       - key: psa_fuel_level_l
         mode: "22"
-        pid: "040F"
-        pre_commands: ["ATSH7E0", "ATCRA"]
-        formula: "(a*256+b-floor(a/128)*65536)*711/1250"
+        pid: "1022"
+        pre_commands: ["ATSH7C0", "ATCRA7C8"]
+        formula: "(a*256+b)/100"
         unit: "L"
         device_class: volume_storage
         state_class: measurement
@@ -474,13 +392,15 @@ devices:
         publish:
           deadband: 0.3
           min_interval: 60s
-      - key: psa_fuel_level_21
-        mode: "21"
-        pid: "A8"
-        pre_commands: ["ATSH7E0", "ATCRA"]
-        formula: "(m*256+n)/256"
-        unit: "%"
-        state_class: measurement
-        accuracy_decimals: 0
-        icon: mdi:gas-station
-        update_interval: 60s
+      # Backup candidate on the same ECU (OBDb: 500/3785 gal = 0.5 L per count):
+      # - key: psa_fuel_level_l
+      #   mode: "21"
+      #   pid: "29"
+      #   pre_commands: ["ATSH7C0", "ATCRA7C8"]
+      #   formula: "a*0.5"
+      #   unit: "L"
+      #   device_class: volume_storage
+      #   state_class: measurement
+      #   accuracy_decimals: 1
+      #   icon: mdi:gas-station
+      #   update_interval: 60s
