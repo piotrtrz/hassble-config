@@ -292,11 +292,26 @@ devices:
       # 22 D43D (engine ECU) reports only 0/1 here — "drive coupled", not a gear
       # number — so the gear comes from the gearbox ECU (6A9 → 689) and the BSI.
       - key: psa_gearbox_gear
+        platform: text_sensor
         mode: "22"
         pid: "D501"
         pre_commands: ["ATSH6A9", "ATCRA689"]
-        formula: "a"
-        accuracy_decimals: 0
+        decode:
+          offset: 0
+          length: 1
+          type: uint8
+          map:
+            "0": "-"
+            "1": "1"
+            "2": "2"
+            "3": "3"
+            "4": "4"
+            "5": "5"
+            "6": "6"
+            "7": "7"
+            "8": "8"
+            "9": "R"
+            "10": "N"
         icon: mdi:car-shift-pattern
         update_interval: 5s
       - key: psa_calc_gear
@@ -320,14 +335,23 @@ devices:
         icon: mdi:oil-temperature
         update_interval: 30s
       # PRND as shown on the instrument panel. 22 DC96 on the BSI (752 -> 652)
-      # never answers on this car; the gearbox ECU does. Raw codes for now —
-      # the P/R/N/D map is filled in after a P->R->N->D calibration.
+      # never answers on this car; the gearbox ECU does. Codes calibrated against
+      # psa_gearbox_gear during a P->N->R->N->D->M sweep (2026-11-06).
       - key: psa_selected_gear
+        platform: text_sensor
         mode: "22"
         pid: "D500"
         pre_commands: ["ATSH6A9", "ATCRA689"]
-        formula: "a"
-        accuracy_decimals: 0
+        decode:
+          offset: 0
+          length: 1
+          type: uint8
+          map:
+            "0": "P"
+            "1": "R"
+            "2": "N"
+            "3": "D"
+            "7": "M"
         icon: mdi:car-shift-pattern
         update_interval: 5s
       - key: psa_water_in_diesel
